@@ -41,8 +41,8 @@ class SignUpView(APIView):
             if user is not None:
                 login(request, user)
             return Response(status=status.HTTP_201_CREATED)
-        except Exception:
-            return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ProfileView(APIView):
@@ -81,3 +81,8 @@ def signUp(request):
         except Exception as e:
             print(f"Error during sign-up: {e}")
             return JsonResponse({"error": "Registration failed"}, status=500)
+
+def signOut(request):
+    """Разлогинивание пользователя"""
+    logout(request)
+    return Response(status=status.HTTP_200_OK)
