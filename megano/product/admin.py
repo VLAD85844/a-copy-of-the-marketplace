@@ -12,7 +12,7 @@ class ProductAdmin(admin.ModelAdmin):
         (None, {
             'fields': ('name', 'image', 'short_description', 'price')
         }),
-        ({
+        ('', {
             'fields': ('sort_index', 'purchase_count', 'is_limited', 'categories'),
             'classes': ('collapse',)
         }),
