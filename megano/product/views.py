@@ -87,29 +87,18 @@ class ProductDetailView(View):
             product = Product.objects.get(id=product_id)
             reviews = product.product_reviews.filter(is_published=True).order_by('-created_at')[:5]
 
-            response_data = {
-                "id": product.id,
-                "title": product.name,
-                "price": str(product.price),
-                "description": product.description or "Описание отсутствует",
-                "tags": product.tags if hasattr(product, 'tags') else [],
-                "rating": str(product.rating) if product.rating is not None else "0.0",
-                "images": [{
-                    "src": product.image.url if product.image else "",
-                    "alt": product.name
-                }],
-                "reviews": [{
-                    "author": review.author,
-                    "email": review.email,
-                    "text": review.text,
-                    "rate": review.rate,
-                    "createdAt": review.created_at.strftime("%Y-%m-%d")
-                } for review in reviews]
-            }
+            product_data = ProductSerializer(product).data
 
-            print(f"Returning product data for ID {product_id}: {response_data}")
+            product_data["reviews"] = [{
+                "author": review.author,
+                "email": review.email,
+                "text": review.text,
+                "rate": review.rate,
+                "createdAt": review.created_at.strftime("%Y-%m-%d")
+            } for review in reviews]
 
-            return JsonResponse(response_data)
+            print(f"Returning product data for ID {product_id}: {product_data}")
+            return JsonResponse(product_data)
 
         except Product.DoesNotExist:
             return JsonResponse({"error": "Product not found"}, status=404)
