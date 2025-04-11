@@ -13,7 +13,7 @@ class Cart(models.Model):
 
 class CartItem(models.Model):
     cart = models.ForeignKey('Cart', related_name='items', on_delete=models.CASCADE)
-    product = models.ForeignKey('product.Product', on_delete=models.CASCADE)  # ← Указываем как строку
+    product = models.ForeignKey('product.Product', on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
 
     def total_price(self):

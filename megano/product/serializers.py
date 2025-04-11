@@ -29,7 +29,7 @@ class BannerSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         return {
-            "src": obj.image.url if obj.image else "/static/default-banner.png",
+            "src": obj.image.url if obj.image else "",
             "alt": obj.title
         }
 
