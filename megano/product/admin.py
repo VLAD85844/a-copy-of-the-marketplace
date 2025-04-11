@@ -6,11 +6,11 @@ from .models import Product, Category
 class ProductAdmin(admin.ModelAdmin):
     list_display = ['name', 'price', 'sort_index', 'purchase_count', 'is_limited']
     list_filter = ['price', 'is_limited']
-    search_fields = ['name', 'short_description']
+    search_fields = ['name', 'short_description', 'description']
     filter_horizontal = ['categories']
     fieldsets = (
         (None, {
-            'fields': ('name', 'image', 'short_description', 'price')
+            'fields': ('name', 'image', 'short_description', 'description', 'price')
         }),
         ('', {
             'fields': ('sort_index', 'purchase_count', 'is_limited', 'categories'),

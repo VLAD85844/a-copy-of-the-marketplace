@@ -1,21 +1,23 @@
-from django.shortcuts import render
 import json
 from django.http import JsonResponse
-from .models import Product, Category, Cart, CartItem, Banner
+from .models import Product, Category, Cart, CartItem, Banner, Review
 from .serializers import ProductSerializer, CategorySerializer
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+
 
 class ProductPopularView(View):
     def get(self, request):
         products = Product.objects.order_by('-sort_index', '-purchase_count')[:8]
         return JsonResponse(ProductSerializer(products, many=True).data, safe=False)
 
+
 class ProductLimitedView(View):
     def get(self, request):
         limited_edition = Product.objects.filter(is_limited=True)
         return JsonResponse(ProductSerializer(limited_edition, many=True).data, safe=False)
+
 
 class CategoryListView(View):
     def get(self, request):
@@ -23,22 +25,86 @@ class CategoryListView(View):
         return JsonResponse(CategorySerializer(featured_categories, many=True).data, safe=False)
 
 
+class ProductReviewsView(View):
+    def get(self, request, product_id):
+        try:
+            reviews = Review.objects.filter(product_id=product_id, is_published=True)
+            serialized_reviews = []
+            for review in reviews:
+                serialized_reviews.append({
+                    "author": review.author,
+                    "email": review.email,
+                    "text": review.text,
+                    "rate": review.rate,
+                    "createdAt": review.created_at.strftime("%Y-%m-%d")
+                })
+            return JsonResponse(serialized_reviews, safe=False)
+        except Exception as e:
+            print(f"Error getting reviews: {str(e)}")
+            return JsonResponse({"error": "Server error"}, status=500)
+
+    @method_decorator(csrf_exempt)
+    def post(self, request, product_id):
+        try:
+            data = json.loads(request.body)
+
+            if not all(key in data for key in ['author', 'email', 'text', 'rate']):
+                return JsonResponse({"error": "Missing required fields"}, status=400)
+
+            if not 1 <= data['rate'] <= 5:
+                return JsonResponse({"error": "Rate must be between 1 and 5"}, status=400)
+
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return JsonResponse({"error": "Product not found"}, status=404)
+
+            review = Review.objects.create(
+                product=product,
+                author=data['author'],
+                email=data['email'],
+                text=data['text'],
+                rate=data['rate']
+            )
+
+            product.update_rating()
+
+            return JsonResponse({
+                "success": True,
+                "id": review.id
+            }, status=201)
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            print(f"Error creating review: {str(e)}")
+            return JsonResponse({"error": "Server error"}, status=500)
+
+
 class ProductDetailView(View):
     def get(self, request, product_id):
         try:
             product = Product.objects.get(id=product_id)
+            reviews = product.product_reviews.filter(is_published=True).order_by('-created_at')[:5]
+
             response_data = {
                 "id": product.id,
                 "title": product.name,
                 "price": str(product.price),
                 "description": product.description or "Описание отсутствует",
                 "tags": product.tags if hasattr(product, 'tags') else [],
-                "rating": str(product.rating) if hasattr(product, 'rating') else "0.0",
+                "rating": str(product.rating) if product.rating is not None else "0.0",
                 "images": [{
                     "src": product.image.url if product.image else "",
                     "alt": product.name
                 }],
-                "reviews": []
+                "reviews": [{
+                    "author": review.author,
+                    "email": review.email,
+                    "text": review.text,
+                    "rate": review.rate,
+                    "createdAt": review.created_at.strftime("%Y-%m-%d")
+                } for review in reviews]
             }
 
             print(f"Returning product data for ID {product_id}: {response_data}")

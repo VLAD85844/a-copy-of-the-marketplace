@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, Category, Banner
+from .models import Product, Category, Banner, Review
 
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
@@ -32,3 +32,8 @@ class BannerSerializer(serializers.ModelSerializer):
             "src": obj.image.url if obj.image else "/static/default-banner.png",
             "alt": obj.title
         }
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = ['id', 'author', 'email', 'text', 'rate', 'created_at']

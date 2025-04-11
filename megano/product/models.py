@@ -42,6 +42,7 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+
 class Product(models.Model):
     """Модель товара"""
     name = models.CharField("Название", max_length=255)
@@ -56,7 +57,14 @@ class Product(models.Model):
     free_delivery = models.BooleanField("Бесплатная доставка", default=False)
     image = models.ImageField(upload_to='products/', blank=True, null=True)
     tags = models.JSONField("Теги", default=list)
-    reviews = models.PositiveIntegerField("Количество отзывов", default=0)
+    def update_rating(self):
+        reviews = self.product_reviews.filter(is_published=True)
+        if reviews.exists():
+            total_rates = sum(review.rate for review in reviews)
+            avg_rating = total_rates / reviews.count()
+            self.rating = round(avg_rating, 1)
+            self.reviews = reviews.count()
+            self.save()
     is_limited = models.BooleanField("Ограниченный тираж", default=False)
     categories = models.ManyToManyField(Category, related_name='products', verbose_name="Категории")
 
@@ -65,4 +73,19 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+class Review(models.Model):
+    product = models.ForeignKey('Product', related_name='product_reviews', on_delete=models.CASCADE)
+    author = models.CharField(max_length=100)
+    email = models.EmailField()
+    text = models.TextField()
+    rate = models.PositiveSmallIntegerField(choices=[(i, str(i)) for i in range(1, 6)])
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Review by {self.author} for {self.product.name}"
 
