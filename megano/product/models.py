@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.apps import apps
 
+
 class Cart(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
     session_key = models.CharField(max_length=40, null=True, blank=True)
@@ -23,6 +24,7 @@ class CartItem(models.Model):
     def __str__(self):
         return f"{self.quantity} × {self.product.name}"
 
+
 class Banner(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -32,6 +34,7 @@ class Banner(models.Model):
 
     def __str__(self):
         return self.title
+
 
 class Category(models.Model):
     """Модель категории товара"""
@@ -74,8 +77,9 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+
 class Review(models.Model):
-    product = models.ForeignKey('Product', related_name='product_reviews', on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='product_reviews')
     author = models.CharField(max_length=100)
     email = models.EmailField()
     text = models.TextField()
@@ -89,3 +93,8 @@ class Review(models.Model):
     def __str__(self):
         return f"Review by {self.author} for {self.product.name}"
 
+
+class Specification(models.Model):
+    product = models.ForeignKey(Product, related_name='specifications', on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    value = models.CharField(max_length=100)
