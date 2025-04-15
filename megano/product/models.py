@@ -17,10 +17,6 @@ class CartItem(models.Model):
     product = models.ForeignKey('product.Product', on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
 
-    def total_price(self):
-        Product = apps.get_model('product', 'Product')
-        return self.quantity * Product.objects.get(id=self.product_id).price
-
     def __str__(self):
         return f"{self.quantity} × {self.product.name}"
 
@@ -50,14 +46,15 @@ class Product(models.Model):
     """Модель товара"""
     name = models.CharField("Название", max_length=255)
     description = models.TextField(default="Описание отсутствует")
+    full_description = models.TextField("Полное описание", default="")
     price = models.DecimalField("Цена", max_digits=10, decimal_places=2)
     count = models.IntegerField("Количество", default=0)
     date = models.DateTimeField(auto_now_add=True, verbose_name="Дата добавления")
     sort_index = models.IntegerField("Индекс сортировки", default=0)
     purchase_count = models.IntegerField("Количество покупок", default=0)
     short_description = models.TextField("Краткое описание", blank=True)
-    rating = models.DecimalField("Рейтинг", max_digits=3, decimal_places=1, null=True, blank=True)
-    free_delivery = models.BooleanField("Бесплатная доставка", default=False)
+    rating = models.DecimalField("Рейтинг", max_digits=3, decimal_places=1, default=4.6, null=True, blank=True)
+    free_delivery = models.BooleanField("Бесплатная доставка", default=True)
     image = models.ImageField(upload_to='products/', blank=True, null=True)
     tags = models.JSONField("Теги", default=list)
     def update_rating(self):
@@ -96,5 +93,5 @@ class Review(models.Model):
 
 class Specification(models.Model):
     product = models.ForeignKey(Product, related_name='specifications', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, verbose_name="Size")
     value = models.CharField(max_length=100)

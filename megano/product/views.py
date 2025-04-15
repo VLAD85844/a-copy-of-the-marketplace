@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse
 from .models import Product, Category, Cart, CartItem, Banner, Review
-from .serializers import ProductSerializer, CategorySerializer, ProductSerializer, ProductFullSerializer, BannerSerializer, ReviewSerializer
+from .serializers import ProductSerializer, CategorySerializer, ProductSerializer, ProductFullSerializer, BannerSerializer, ReviewSerializer, BasketItemSerializer
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -94,27 +94,19 @@ class ProductDetailView(View):
 @method_decorator(csrf_exempt, name='dispatch')
 class BasketView(View):
     def get(self, request):
-        session_key = request.session.session_key
-        if not session_key:
-            return JsonResponse({"items": []})
-
         try:
-            cart = Cart.objects.get(session_key=session_key)
-            items = cart.items.select_related('product')
-            products = [item.product for item in items]
+            session_key = request.session.session_key
+            if not session_key:
+                return JsonResponse({"items": []})
 
-            serializer = ProductSerializer(
-                products,
+            cart = Cart.objects.get(session_key=session_key)
+            items = cart.items.all()  # Получаем CartItem
+            serializer = BasketItemSerializer(
+                items,
                 many=True,
                 context={'request': request}
             )
-            data = serializer.data
-
-            for i, item in enumerate(items):
-                data[i]['count'] = item.quantity
-
-            return JsonResponse({"items": data})
-
+            return JsonResponse({"items": serializer.data})
         except Cart.DoesNotExist:
             return JsonResponse({"items": []})
 
@@ -146,7 +138,7 @@ class BasketView(View):
 
             session_key = request.session.session_key
             if not session_key:
-                request.session.create()
+                request.session.save()
                 session_key = request.session.session_key
 
             cart, created = Cart.objects.get_or_create(session_key=session_key)
