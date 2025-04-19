@@ -35,9 +35,9 @@ class ProductSerializer(serializers.ModelSerializer):
         return []
 
     def get_tags(self, obj):
-        if isinstance(obj.tags, str):
-            return obj.tags.split(',')
-        return obj.tags
+        if isinstance(obj.tags, list):
+            return [{"id": idx, "name": str(tag)} for idx, tag in enumerate(obj.tags, 1)]
+        return [{"id": 1, "name": "string"}]
 
     def get_reviews(self, obj):
         return obj.product_reviews.count()
@@ -77,14 +77,26 @@ class ProductFullSerializer(ProductSerializer):
 
     def get_tags(self, obj):
         if isinstance(obj.tags, list):
-            return obj.tags
-        return []
+            return [{"id": idx, "name": str(tag)} for idx, tag in enumerate(obj.tags, 1)]
+        return [{"id": 1, "name": "string"}]
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+    subcategories = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ['id', 'name', 'is_featured']
+        fields = ['id', 'name', 'is_featured', 'image', 'subcategories']
+
+    def get_image(self, obj):
+        return {
+            "src": obj.image.url if obj.image else None,
+            "alt": obj.name if obj.image else "No image"
+        }
+
+    def get_subcategories(self, obj):
+        return list(obj.subcategories.values_list('id', flat=True)) if obj.subcategories.exists() else []
 
 
 class BannerSerializer(serializers.ModelSerializer):
@@ -128,7 +140,11 @@ class BasketItemSerializer(serializers.ModelSerializer):
         return []
 
     def get_tags(self, obj):
-        return obj.product.tags if isinstance(obj.product.tags, list) else []
+        tags = obj.product.tags
+        if isinstance(tags, list):
+            # Возвращаем список словарей с id и name
+            return [{"id": idx, "name": str(tag)} for idx, tag in enumerate(tags, 1)]
+        return []
 
     def get_specifications(self, obj):
         return [{"name": spec.name, "value": spec.value} for spec in obj.product.specifications.all()]
@@ -139,3 +155,27 @@ class BasketItemSerializer(serializers.ModelSerializer):
             'id', 'title', 'price', 'count', 'category',
             'freeDelivery', 'images', 'tags', 'specifications'
         ]
+
+
+class SaleItemSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk')
+    salePrice = serializers.DecimalField(source='sale_price', max_digits=10, decimal_places=2)
+    dateFrom = serializers.SerializerMethodField()
+    dateTo = serializers.SerializerMethodField()
+    title = serializers.CharField(source='name')
+    images = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ['id', 'price', 'salePrice', 'dateFrom', 'dateTo', 'title', 'images']
+
+    def get_dateFrom(self, obj):
+        return obj.date_from.strftime("%m-%d") if obj.date_from else None
+
+    def get_dateTo(self, obj):
+        return obj.date_to.strftime("%m-%d") if obj.date_to else None
+
+    def get_images(self, obj):
+        if obj.image:
+            return [{"src": f"/media/{obj.image.url.split('/media/')[-1]}", "alt": obj.name}]
+        return []

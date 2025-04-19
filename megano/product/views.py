@@ -1,8 +1,10 @@
 import json
 from django.http import JsonResponse
+from django.db.models import Q
 from .models import Product, Category, Cart, CartItem, Banner, Review
-from .serializers import ProductSerializer, CategorySerializer, ProductSerializer, ProductFullSerializer, BannerSerializer, ReviewSerializer, BasketItemSerializer
+from .serializers import ProductSerializer, CategorySerializer, ProductSerializer, SaleItemSerializer, ProductFullSerializer, BannerSerializer, ReviewSerializer, BasketItemSerializer
 from django.views import View
+from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
@@ -93,22 +95,29 @@ class ProductDetailView(View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class BasketView(View):
-    def get(self, request):
-        try:
+    def get_cart(self, request):
+        if request.user.is_authenticated:
+            cart, created = Cart.objects.get_or_create(user=request.user)
+        else:
             session_key = request.session.session_key
             if not session_key:
-                return JsonResponse({"items": []})
+                request.session.create()
+                session_key = request.session.session_key
+            cart, created = Cart.objects.get_or_create(session_key=session_key)
+        return cart
 
-            cart = Cart.objects.get(session_key=session_key)
-            items = cart.items.all()  # Получаем CartItem
+    def get(self, request):
+        try:
+            cart = self.get_cart(request)
+            items = cart.items.all()
             serializer = BasketItemSerializer(
                 items,
                 many=True,
                 context={'request': request}
             )
-            return JsonResponse({"items": serializer.data})
-        except Cart.DoesNotExist:
-            return JsonResponse({"items": []})
+            return JsonResponse(serializer.data, safe=False)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
     def post(self, request):
         try:
@@ -136,12 +145,7 @@ class BasketView(View):
             except (ValueError, TypeError):
                 return JsonResponse({"error": "Quantity must be positive integer"}, status=400)
 
-            session_key = request.session.session_key
-            if not session_key:
-                request.session.save()
-                session_key = request.session.session_key
-
-            cart, created = Cart.objects.get_or_create(session_key=session_key)
+            cart = self.get_cart(request)
             product = Product.objects.get(id=product_id)
 
             cart_item, item_created = CartItem.objects.get_or_create(
@@ -159,7 +163,7 @@ class BasketView(View):
         except Product.DoesNotExist:
             return JsonResponse({"error": "Product not found"}, status=404)
         except Exception as e:
-            return JsonResponse({"error": "Server error"}, status=500)
+            return JsonResponse({"error": str(e)}, status=500)
 
     def delete(self, request):
         try:
@@ -171,9 +175,7 @@ class BasketView(View):
                 return JsonResponse({"error": "Product ID is required"}, status=400)
 
             quantity = int(quantity)
-            session_key = request.session.session_key
-
-            cart = Cart.objects.get(session_key=session_key)
+            cart = self.get_cart(request)
             product = Product.objects.get(id=product_id)
             cart_item = CartItem.objects.get(cart=cart, product=product)
 
@@ -188,7 +190,7 @@ class BasketView(View):
         except (Cart.DoesNotExist, Product.DoesNotExist, CartItem.DoesNotExist):
             return JsonResponse({"error": "Not found"}, status=404)
         except Exception as e:
-            return JsonResponse({"error": "Server error"}, status=500)
+            return JsonResponse({"error": str(e)}, status=500)
 
 
 class BannerListView(View):
@@ -196,3 +198,114 @@ class BannerListView(View):
         banners = Banner.objects.filter(is_active=True)
         serializer = BannerSerializer(banners, many=True, context={'request': request})
         return JsonResponse(serializer.data, safe=False)
+
+
+class SaleView(View):
+    def get(self, request):
+        try:
+            sale_products = Product.objects.filter(sale_price__isnull=False).order_by('-date_from')
+
+            current_page = request.GET.get('currentPage', 1)
+            try:
+                current_page = int(current_page)
+                if current_page < 1:
+                    current_page = 1
+            except ValueError:
+                current_page = 1
+
+            paginator = Paginator(sale_products, 5)
+            try:
+                page_obj = paginator.page(current_page)
+            except:
+                page_obj = paginator.page(1)
+
+            serializer = SaleItemSerializer(
+                page_obj.object_list,
+                many=True,
+                context={'request': request}
+            )
+
+            response_data = {
+                "items": serializer.data,
+                "currentPage": page_obj.number,
+                "lastPage": paginator.num_pages
+            }
+
+            return JsonResponse(response_data)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class CatalogView(View):
+    def get(self, request):
+        try:
+            filters = request.GET.get('filter', {})
+            name_filter = filters.get('name', '')
+            min_price = float(filters.get('minPrice', 0))
+            max_price = float(filters.get('maxPrice', 999999))
+            free_delivery = filters.get('freeDelivery', 'false') == 'true'
+            available = filters.get('available', 'false') == 'true'
+
+            sort_field = request.GET.get('sort', 'id')
+            sort_type = request.GET.get('sortType', 'inc')
+
+            current_page = int(request.GET.get('currentPage', 1))
+            limit = int(request.GET.get('limit', 20))
+
+            products = Product.objects.all()
+
+            if name_filter:
+                products = products.filter(name__icontains=name_filter)
+
+            products = products.filter(
+                price__gte=min_price,
+                price__lte=max_price
+            )
+
+            if free_delivery:
+                products = products.filter(free_delivery=True)
+
+            if available:
+                products = products.filter(count__gt=0)
+
+            if sort_type == 'dec':
+                sort_field = f'-{sort_field}'
+            products = products.order_by(sort_field)
+
+            paginator = Paginator(products, limit)
+            page_obj = paginator.page(current_page)
+
+            serializer = ProductSerializer(
+                page_obj.object_list,
+                many=True,
+                context={'request': request}
+            )
+
+            return JsonResponse({
+                "items": serializer.data,
+                "currentPage": page_obj.number,
+                "lastPage": paginator.num_pages
+            })
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class TagsView(View):
+    def get(self, request):
+        try:
+            tags = set()
+            for product in Product.objects.all():
+                if isinstance(product.tags, list):
+                    tags.update(str(tag) for tag in product.tags if tag)
+
+            formatted_tags = [
+                {"id": idx, "name": tag}
+                for idx, tag in enumerate(sorted(tags), 1)
+            ]
+
+            return JsonResponse(formatted_tags, safe=False)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)

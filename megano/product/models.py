@@ -34,6 +34,13 @@ class Banner(models.Model):
 
 class Category(models.Model):
     """Модель категории товара"""
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='subcategories'
+    )
     name = models.CharField(max_length=255, verbose_name="Название категории")
     image = models.ImageField(upload_to='categories/', null=True, blank=True)
     is_featured = models.BooleanField("Избранная категория", default=False)
@@ -48,6 +55,9 @@ class Product(models.Model):
     description = models.TextField(default="Описание отсутствует")
     full_description = models.TextField("Полное описание", default="")
     price = models.DecimalField("Цена", max_digits=10, decimal_places=2)
+    sale_price = models.DecimalField("Цена со скидкой", max_digits=10, decimal_places=2, null=True, blank=True)
+    date_from = models.DateField("Дата начала акции", null=True, blank=True)
+    date_to = models.DateField("Дата окончания акции", null=True, blank=True)
     count = models.IntegerField("Количество", default=0)
     date = models.DateTimeField(auto_now_add=True, verbose_name="Дата добавления")
     sort_index = models.IntegerField("Индекс сортировки", default=0)
@@ -93,5 +103,8 @@ class Review(models.Model):
 
 class Specification(models.Model):
     product = models.ForeignKey(Product, related_name='specifications', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100, verbose_name="Size")
+    name = models.CharField(max_length=100, verbose_name="Характеристика")
     value = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.product.name} - {self.name}: {self.value}"
