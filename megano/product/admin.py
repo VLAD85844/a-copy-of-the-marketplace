@@ -1,7 +1,10 @@
 from django.contrib import admin
 from django import forms
 import json
-from .models import Product, Category, Specification
+from .models import Product, Category, Specification, Review
+from django.utils.safestring import mark_safe
+from django.urls import reverse
+from django.utils.html import format_html
 
 
 class TagsAdminWidget(forms.Textarea):
@@ -31,6 +34,10 @@ class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
         fields = '__all__'
+        widgets = {
+            'date_from': forms.DateInput(attrs={'type': 'date'}),
+            'date_to': forms.DateInput(attrs={'type': 'date'}),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -58,11 +65,52 @@ class ProductForm(forms.ModelForm):
             raise forms.ValidationError(f"Некорректный JSON: {str(e)}")
 
 
+class ReviewInline(admin.TabularInline):
+    model = Review
+    extra = 1
+    fields = ['author', 'email', 'text', 'rate', 'is_published']
+    readonly_fields = ['created_at']
+
+
+class SpecificationInline(admin.TabularInline):
+    model = Specification
+    extra = 1
+    fields = ['name', 'value']
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductForm
-    list_display = ['name', 'price', 'display_decoded_tags']
+    list_display = ['name', 'price', 'display_image', 'is_limited', 'on_sale', 'display_decoded_tags', 'rating']
+    list_filter = ['is_limited', 'categories', 'free_delivery']
     search_fields = ['name', 'tags']
+    filter_horizontal = ['categories']
+    inlines = [SpecificationInline, ReviewInline]
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('name', 'description', 'full_description', 'image', 'price', 'count')
+        }),
+        ('Категории и теги', {
+            'fields': ('categories', 'tags_input')
+        }),
+        ('Доставка и рейтинг', {
+            'fields': ('free_delivery', 'rating')
+        }),
+        ('Распродажа', {
+            'fields': ('sale_price', 'date_from', 'date_to'),
+            'classes': ('collapse',)
+        }),
+        ('Лимитированная серия', {
+            'fields': ('is_limited',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def display_image(self, obj):
+        if obj.image:
+            return mark_safe(f'<img src="{obj.image.url}" width="50" height="50" />')
+        return "-"
+    display_image.short_description = "Изображение"
 
     def display_decoded_tags(self, obj):
         if obj.tags:
@@ -73,14 +121,12 @@ class ProductAdmin(admin.ModelAdmin):
             ]
             return ", ".join(decoded_tags)
         return "-"
+    display_decoded_tags.short_description = "Теги"
 
-    display_decoded_tags.short_description = "Теги (читаемый вид)"
-
-    fieldsets = (
-        (None, {
-            'fields': ('name', 'price', 'tags_input')
-        }),
-    )
+    def on_sale(self, obj):
+        return obj.sale_price is not None
+    on_sale.boolean = True
+    on_sale.short_description = "Распродажа"
 
     def save_model(self, request, obj, form, change):
         if 'tags_input' in form.cleaned_data:
@@ -88,15 +134,23 @@ class ProductAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-@admin.register(Specification)
-class SpecificationAdmin(admin.ModelAdmin):
-    list_display = ('product', 'name', 'value')
-    list_editable = ('value',)
-    search_fields = ('product__name', 'name', 'value')
-
-
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_featured')
+    list_display = ('name', 'display_image', 'is_featured', 'parent_link')
     list_editable = ('is_featured',)
     search_fields = ('name',)
+    list_filter = ('is_featured', 'parent')
+    fields = ('parent', 'name', 'image', 'is_featured')
+
+    def display_image(self, obj):
+        if obj.image:
+            return mark_safe(f'<img src="{obj.image.url}" width="50" height="50" />')
+        return "-"
+    display_image.short_description = "Изображение"
+
+    def parent_link(self, obj):
+        if obj.parent:
+            url = reverse('admin:app_category_change', args=[obj.parent.id])
+            return format_html('<a href="{}">{}</a>', url, obj.parent.name)
+        return "-"
+    parent_link.short_description = "Родительская категория"

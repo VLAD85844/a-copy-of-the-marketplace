@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Order, OrderItem
+from .models import Order, OrderItem, Payment
 from product.models import Product
 from .serializers import OrderSerializer
 
@@ -20,25 +20,17 @@ class OrderView(View):
 
             if isinstance(request_data, list):
                 products_data = request_data
-                order_data = {
-                    'fullName': 'Default Name',
-                    'email': 'default@example.com',
-                    'phone': '70000000000',
-                    'deliveryType': 'ordinary',
-                    'paymentType': 'online',
-                    'city': 'Default City',
-                    'address': 'Default Address'
-                }
+                order_data = {}
             elif isinstance(request_data, dict):
-                products_data = request_data.get('products', [])
+                products_data = request_data.pop('products', [])
                 order_data = request_data
             else:
                 return JsonResponse({"error": "Unsupported data format"}, status=400)
 
             order = Order.objects.create(
                 user=request.user if request.user.is_authenticated else None,
-                full_name=order_data.get('fullName', 'Default Name'),
-                email=order_data.get('email', 'default@example.com'),
+                full_name=order_data.get('fullName', 'Не указано'),
+                email=order_data.get('email', 'no-email@example.com'),
                 phone=order_data.get('phone', '70000000000'),
                 delivery_type=order_data.get('deliveryType', 'ordinary'),
                 payment_type=order_data.get('paymentType', 'online'),
@@ -46,8 +38,9 @@ class OrderView(View):
                     float(item.get('price', 0)) * int(item.get('count', 0))
                     for item in products_data
                 ),
-                city=order_data.get('city', 'Default City'),
-                address=order_data.get('address', 'Default Address')
+                city=order_data.get('city', 'Не указан'),
+                address=order_data.get('address', 'Не указан'),
+                status='accepted'
             )
 
             for item in products_data:
@@ -70,16 +63,12 @@ class OrderView(View):
                 "orderId": order.id,
                 "status": "created",
                 "detailUrl": f"/api/orders/{order.id}",
-
             }, status=201)
 
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
     def get(self, request):
-        # if not request.user.is_authenticated:
-        #     return JsonResponse({"error": "Authentication required"}, status=401)
-
         orders = Order.objects.all().order_by('-created_at')
 
         response_data = []
@@ -234,6 +223,16 @@ class PaymentView(View):
             if not self._validate_payment_data(data):
                 return JsonResponse({"error": "Invalid payment data"}, status=400)
 
+            Payment.objects.create(
+                order=order,
+                card_number=data['number'],
+                card_name=data['name'],
+                card_exp_month=data['month'],
+                card_exp_year=data['year'],
+                card_cvv=data['code'],
+                amount=order.total_cost
+            )
+
             order.status = 'processing'
             order.save()
 
@@ -247,7 +246,19 @@ class PaymentView(View):
             return JsonResponse({"error": "Order not found"}, status=404)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
     def _validate_payment_data(self, data):
-        required_fields = ['number', 'name', 'month', 'year', 'code']
-        return all(field in data for field in required_fields)
+        required_fields = {
+            'number': lambda x: len(x) == 16 and x.isdigit(),
+            'name': lambda x: len(x) > 0,
+            'month': lambda x: x.isdigit() and 1 <= int(x) <= 12,
+            'year': lambda x: x.isdigit() and len(x) == 4,
+            'code': lambda x: len(x) == 3 and x.isdigit()
+        }
+
+        for field, validator in required_fields.items():
+            if field not in data or not validator(str(data[field])):
+                return False
+        return True

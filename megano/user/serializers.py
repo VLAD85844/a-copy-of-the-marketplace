@@ -20,7 +20,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ["fullName", "phone", "balance", "avatar", "email"]
+        fields = ["fullName", "phone", "avatar", "email"]
 
     def update(self, instance, validated_data):
         avatar_data = validated_data.pop('avatar', None)

@@ -6,16 +6,14 @@ class Order(models.Model):
     STATUS_CHOICES = [
         ('accepted', 'Принят'),
         ('processing', 'В обработке'),
-        ('completed', 'Завершен'),
     ]
     DELIVERY_TYPES = [
         ('ordinary', 'Обычная'),
         ('express', 'Экспресс'),
-        ('free', 'Бесплатная'),
     ]
     PAYMENT_TYPES = [
         ('online', 'Онлайн'),
-        ('someone', 'При получении'),
+        ('online_random', 'Онлайн со случайного счета'),
     ]
 
     user = models.ForeignKey(
@@ -30,7 +28,7 @@ class Order(models.Model):
     email = models.EmailField()
     phone = models.CharField(max_length=20)
     delivery_type = models.CharField(max_length=10, choices=DELIVERY_TYPES, default='ordinary')
-    payment_type = models.CharField(max_length=10, choices=PAYMENT_TYPES)
+    payment_type = models.CharField(max_length=15, choices=PAYMENT_TYPES)
     total_cost = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='accepted')
     city = models.CharField(max_length=100)
@@ -47,3 +45,30 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} × {self.product.name}"
+
+
+class Payment(models.Model):
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='payment'
+    )
+    card_number = models.CharField(max_length=16)
+    card_name = models.CharField(max_length=255)
+    card_exp_month = models.CharField(max_length=2)
+    card_exp_year = models.CharField(max_length=4)
+    card_cvv = models.CharField(max_length=3)
+    payment_date = models.DateTimeField(auto_now_add=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('completed', 'Completed'),
+            ('failed', 'Failed')
+        ],
+        default='pending'
+    )
+
+    def __str__(self):
+        return f"Payment for Order #{self.order.id}"
