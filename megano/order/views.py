@@ -70,17 +70,17 @@ class OrderView(View):
                 "orderId": order.id,
                 "status": "created",
                 "detailUrl": f"/api/orders/{order.id}",
-                "paymentUrl": f"/payment/{order.id}/"
+
             }, status=201)
 
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
     def get(self, request):
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
+        # if not request.user.is_authenticated:
+        #     return JsonResponse({"error": "Authentication required"}, status=401)
 
-        orders = Order.objects.filter(user=request.user).order_by('-created_at')
+        orders = Order.objects.all().order_by('-created_at')
 
         response_data = []
         for order in orders:
@@ -160,6 +160,7 @@ class OrderDetailView(View):
                     order.status = data['status']
                     order.save()
                     return JsonResponse({
+                        "orderId": order.id,
                         "status": "success",
                         "message": "Order status updated",
                         "newStatus": order.status
@@ -206,11 +207,16 @@ class OrderDetailView(View):
 @method_decorator(csrf_exempt, name='dispatch')
 class PaymentView(View):
     def get(self, request, order_id):
-        if not order_id or order_id == 'undefined' or not isinstance(order_id, int):
+        if order_id == 'undefined':
             return JsonResponse({"error": "Invalid Order ID"}, status=400)
 
         try:
-            order = Order.objects.get(id=order_id)
+            order_id_int = int(order_id)
+        except (ValueError, TypeError):
+            return JsonResponse({"error": "Invalid Order ID"}, status=400)
+
+        try:
+            order = Order.objects.get(id=order_id_int)
             return JsonResponse({
                 "orderId": order.id,
                 "status": order.status,
@@ -243,5 +249,5 @@ class PaymentView(View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     def _validate_payment_data(self, data):
-        required_fields = ['card_number', 'expiry_date', 'cvv']
+        required_fields = ['number', 'name', 'month', 'year', 'code']
         return all(field in data for field in required_fields)
